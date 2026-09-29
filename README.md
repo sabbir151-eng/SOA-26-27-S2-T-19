@@ -4,7 +4,6 @@
 
 Students browse the menu, place pickup orders and receive invoice numbers. Canteen staff manage the menu, fulfil incoming orders and view analytics. The business capabilities are organised as four cohesive **services** — Authentication, Menu, Order & Invoice, and Analytics — each exposed through a REST/JSON interface and consumed by role-specific clients.
 
-> **Course:** SOA Programming and Microservices (24SDCS03) · Department of CSE, KLH Bowrampet Campus
 
 ---
 
