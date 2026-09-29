@@ -1,86 +1,348 @@
 # 🍽️ Campus Canteen — College Food Ordering System
 
-A full-stack web application for college canteen management. Students can browse the menu, place orders, and receive invoices. Canteen staff can manage the menu and fulfill incoming orders in real-time.
+**An SOA-oriented full-stack application for college canteen management.**
+
+Students browse the menu, place pickup orders and receive invoice numbers. Canteen staff manage the menu, fulfil incoming orders and view analytics. The business capabilities are organised as four cohesive **services** — Authentication, Menu, Order & Invoice, and Analytics — each exposed through a REST/JSON interface and consumed by role-specific clients.
+
+> **Course:** SOA Programming and Microservices (24SDCS03) · Department of CSE, KLH Bowrampet Campus
 
 ---
 
-## 🏗️ Tech Stack
+## 📑 Table of Contents
 
-| Layer          | Technology                                |
-| -------------- | ----------------------------------------- |
-| **Frontend**   | React.js 18 + Tailwind CSS + Chart.js     |
-| **Backend**    | Node.js + Express.js                      |
-| **Database**   | MongoDB + Mongoose ODM                    |
-| **Auth**       | JWT (JSON Web Tokens) + bcrypt            |
-| **Build Tool** | Vite                                      |
-| **PWA**        | Service Worker + Web App Manifest         |
+1. [SOA Overview](#-soa-overview)
+2. [Architecture](#-architecture)
+3. [Service Catalog](#-service-catalog)
+4. [Service Contracts (REST APIs)](#-service-contracts-rest-apis)
+5. [Service Interaction & Order Flow](#-service-interaction--order-flow)
+6. [SOA Principles Applied](#-soa-principles-applied)
+7. [Security & Cross-Cutting Concerns](#-security--cross-cutting-concerns)
+8. [Consumers (Client Layer)](#-consumers-client-layer)
+9. [Tech Stack](#-tech-stack)
+10. [Setup Instructions](#-setup-instructions)
+11. [Demo Login Credentials](#-demo-login-credentials)
+12. [Project Structure (Mapped to Services)](#-project-structure-mapped-to-services)
+13. [Current Scope & Future Work](#-current-scope--future-work)
+14. [License](#-license)
 
 ---
 
-## 📦 Features
+## 🧭 SOA Overview
 
-### 🎓 Student Features
-- ✅ **Browse Menu** — View all canteen food items with search, filter & sort
-- ✅ **Shopping Cart** — Add/remove items, adjust quantities (persisted in localStorage)
-- ✅ **Place Orders** — Order food with phone number and optional notes
-- ✅ **Invoice System** — Each order gets a unique invoice number (e.g. `INV-20260328-0001`)
-- ✅ **Order Tracking** — Real-time status updates: Pending → Preparing → Ready for Pickup → Picked Up
-- ✅ **Order History** — View all past orders with invoice numbers
+Running a college canteen involves several connected activities: menu discovery, authentication, ordering, invoice generation, status tracking and staff processing. When these are handled as disconnected steps, students lack visibility after ordering and staff lack a structured way to process orders.
 
-### 🏪 Canteen Staff (Admin) Features
-- ✅ **Incoming Orders** — See all student orders with customer name, email, phone & invoice number
-- ✅ **Order Management** — Update order status (Start Preparing → Ready for Pickup → Mark Picked Up)
-- ✅ **Auto-Refresh** — Orders page refreshes every 15 seconds for new incoming orders
-- ✅ **Menu Management** — Full CRUD (Create, Read, Update, Delete) for menu items
-- ✅ **Analytics Dashboard** — Charts for popular dishes, order stats, revenue trends
+This project addresses that by exposing each business capability as a **service with a clear interface**:
 
-### 🔐 Authentication & Roles
-- ✅ **Separate Login/Register** — Tabs for Student and Canteen Staff
-- ✅ **Role-Based Access** — Students see ordering UI, staff sees order management
-- ✅ **Admin Registration** — Requires canteen name, phone number, and password
-- ✅ **Route Protection** — Admin can't access ordering pages, students can't access admin pages
+| Business capability | Service | Consumers |
+|---|---|---|
+| Who is the user and what may they do? | **Authentication Service** | Student UI, Staff UI |
+| What food is available? | **Menu Service** | Student UI, Staff UI |
+| Place, track and fulfil an order; issue invoice | **Order & Invoice Service** | Student UI, Staff UI |
+| What is popular, and how is the canteen performing? | **Analytics Service** | Staff UI (and public popular-dishes view) |
 
-### 🔍 Search & Filter
-- ✅ **Search** food items by name
-- ✅ **Filter** by category (Veg, Non-Veg, Snacks, Desserts, Beverages, Main Course)
-- ✅ **Filter** by price range (min/max)
-- ✅ **Sort** by price (low→high, high→low), popularity, rating, or latest
+**Goals**
 
-### 📊 Analytics Dashboard (Admin)
-- ✅ **Popular Dishes** — Bar chart showing most ordered items
-- ✅ **Order Statistics** — Doughnut chart showing order status breakdown
-- ✅ **Revenue Trends** — Line chart showing monthly revenue over time
+- Identify cohesive service boundaries
+- Expose REST/JSON interfaces
+- Apply role-based authorization
+- Separate UI, business logic and persistence
+- Support reusable service operations
+- Keep service responsibilities understandable and testable
 
-### 📱 Progressive Web App (PWA)
-- ✅ Installable on mobile devices via "Add to Home Screen"
-- ✅ Offline-capable with Service Worker caching
-- ✅ App-like splash screen and native feel
+---
+
+## 🏗️ Architecture
+
+The system follows a **three-layer architecture**: consumers, a service layer, and data & infrastructure.
+
+```mermaid
+flowchart LR
+    subgraph C["Consumers / UI Layer"]
+        S["Student UI<br/>React 18 + Vite"]
+        A["Staff / Admin UI<br/>React 18 + Vite"]
+    end
+
+    subgraph SV["SOA Service Layer (Node.js + Express, REST/JSON)"]
+        AU["Auth Service"]
+        M["Menu Service"]
+        O["Order & Invoice Service"]
+        AN["Analytics Service"]
+    end
+
+    subgraph D["Data & Infrastructure"]
+        DB[("MongoDB + Mongoose")]
+        SEC["JWT + bcrypt"]
+        VAL["Validation & Error Handling"]
+        AGG["Aggregation / Indexing"]
+    end
+
+    S -->|REST/JSON| AU
+    S -->|REST/JSON| M
+    S -->|REST/JSON| O
+    A -->|REST/JSON| AU
+    A -->|REST/JSON| M
+    A -->|REST/JSON| O
+    A -->|REST/JSON| AN
+
+    AU --> DB
+    M --> DB
+    O --> DB
+    AN --> DB
+    AU -.-> SEC
+    SV -.-> VAL
+    AN -.-> AGG
+```
+
+| Layer | Responsibility | Implemented with |
+|---|---|---|
+| **Consumers / UI** | Student and staff interfaces, role-based navigation | React.js 18, Vite, Tailwind CSS, Chart.js |
+| **Service layer** | Business logic exposed as REST/JSON operations | Node.js, Express.js |
+| **Data & infrastructure** | Persistence, authentication, validation, aggregation, indexing | MongoDB, Mongoose, JWT, bcrypt |
+
+---
+
+## 🧩 Service Catalog
+
+### 1. 🔐 Authentication Service
+**Responsibility:** register users, authenticate them, issue JWTs and expose the caller's profile. Enforces the Student / Canteen Staff roles.
+
+- Separate Student and Canteen Staff registration/login
+- Admin registration requires canteen name, phone number and password
+- Passwords hashed with bcrypt; tokens issued as JWT
+- **Code:** `routes/auth.js`, `controllers/authController.js`, `models/User.js`, `middleware/auth.js`
+
+### 2. 🍔 Menu Service
+**Responsibility:** manage and serve canteen menu items.
+
+- Browse with search, category filter, price range, sorting and pagination
+- Full CRUD for staff
+- Categories: Veg, Non-Veg, Snacks, Desserts, Beverages, Main Course
+- MongoDB text index on item names for fast search
+- **Code:** `routes/menu.js`, `controllers/menuController.js`, `models/MenuItem.js`
+
+### 3. 🧾 Order & Invoice Service
+**Responsibility:** create orders, generate unique invoice numbers, track status and support staff processing.
+
+- Students place pickup orders with phone number and optional notes
+- Every order receives a unique invoice number in the form `INV-YYYYMMDD-NNNN` (auto-incrementing MongoDB counter)
+- Status lifecycle with timestamped `statusHistory` for traceability
+- Students can view their orders and cancel; staff can view all incoming orders and update status
+- **Code:** `routes/orders.js`, `controllers/orderController.js`, `models/Order.js`
+
+### 4. 📊 Analytics Service
+**Responsibility:** turn order data into insights for canteen staff.
+
+- Popular dishes, order-status statistics, revenue summary
+- Implemented with MongoDB aggregation
+- **Code:** `routes/analytics.js`, `controllers/analyticsController.js`
+
+---
+
+## 📡 Service Contracts (REST APIs)
+
+All services are exposed as REST endpoints returning JSON. The **Auth** column is the access policy enforced by the service.
+
+### Authentication Service — `/api/auth`
+
+| Method | Endpoint | Description | Auth |
+|---|---|---|---|
+| POST | `/api/auth/register` | Register new user | No |
+| POST | `/api/auth/login` | Login | No |
+| GET | `/api/auth/profile` | Get user profile | Required |
+
+### Menu Service — `/api/menu`
+
+| Method | Endpoint | Description | Auth |
+|---|---|---|---|
+| GET | `/api/menu` | List items (paginated) | No |
+| GET | `/api/menu/:id` | Get single item | No |
+| GET | `/api/menu/categories/list` | Get all categories | No |
+| POST | `/api/menu` | Create item | Admin |
+| PUT | `/api/menu/:id` | Update item | Admin |
+| DELETE | `/api/menu/:id` | Delete item | Admin |
+
+**Query parameters for `GET /api/menu`**
+
+| Param | Description | Example |
+|---|---|---|
+| `search` | Search items by name | `?search=chicken` |
+| `category` | Filter by category | `?category=veg` |
+| `minPrice` | Minimum price filter | `?minPrice=100` |
+| `maxPrice` | Maximum price filter | `?maxPrice=500` |
+| `sort` | `price_asc`, `price_desc`, `popular`, `rating`, `latest` | `?sort=popular` |
+| `page` | Page number | `?page=2` |
+| `limit` | Items per page | `?limit=12` |
+
+### Order & Invoice Service — `/api/orders`
+
+| Method | Endpoint | Description | Auth |
+|---|---|---|---|
+| POST | `/api/orders` | Create order | Student |
+| GET | `/api/orders/my` | Get my orders | Student |
+| GET | `/api/orders/:id` | Get order details | Owner / Admin |
+| GET | `/api/orders/:id/invoice` | Get order invoice | Owner / Admin |
+| GET | `/api/orders` | Get all orders | Admin |
+| PUT | `/api/orders/:id/status` | Update order status | Admin |
+| PUT | `/api/orders/:id/cancel` | Cancel order | Student |
+
+### Analytics Service — `/api/analytics`
+
+| Method | Endpoint | Description | Auth |
+|---|---|---|---|
+| GET | `/api/analytics/popular` | Popular dishes | No |
+| GET | `/api/analytics/orders` | Order statistics | Admin |
+| GET | `/api/analytics/revenue` | Revenue summary | Admin |
+
+---
+
+## 🔄 Service Interaction & Order Flow
+
+A complete order touches several services in sequence:
+
+```mermaid
+sequenceDiagram
+    actor Student
+    participant UI as Student UI
+    participant Auth as Auth Service
+    participant Menu as Menu Service
+    participant Order as Order & Invoice Service
+    participant Staff as Staff UI
+
+    Student->>UI: Login
+    UI->>Auth: POST /api/auth/login
+    Auth-->>UI: JWT
+    UI->>Menu: GET /api/menu
+    Menu-->>UI: Menu items
+    Student->>UI: Checkout cart
+    UI->>Order: POST /api/orders (JWT)
+    Order-->>UI: Order + invoice number
+    Staff->>Order: GET /api/orders (Admin JWT)
+    Staff->>Order: PUT /api/orders/:id/status
+    UI->>Order: GET /api/orders/:id (track status)
+    Order-->>UI: Current status + history
+```
+
+| Step | Actor | Service call | Result |
+|---|---|---|---|
+| 1 | Student UI | Login / browse menu | Session established |
+| 2 | Auth + Menu | Validate identity / retrieve items | Menu shown |
+| 3 | Order Service | Create order + invoice | Invoice number issued |
+| 4 | Staff UI | Read incoming order | Order visible with student details |
+| 5 | Order Service | Update status | Status history recorded |
+| 6 | Student UI | Track pickup status | Live status shown |
+
+### Order Status Flow
+
+```
+Pending → Preparing → Ready for Pickup → Picked Up (Delivered)
+   ↓
+Cancelled
+```
+
+Each status change is recorded with a timestamp in the order's `statusHistory` array.
+
+### Invoice Numbers
+
+Format: `INV-YYYYMMDD-NNNN` — e.g. `INV-20260328-0001`
+
+- Students see the invoice number on the order tracking page
+- Staff see the invoice number plus student name and phone on the incoming orders page
+- Students show the invoice number to canteen staff for pickup
+
+---
+
+## 📐 SOA Principles Applied
+
+| Principle | How it appears in this project |
+|---|---|
+| **Standardized service contract** | Every capability is a documented REST/JSON endpoint with a defined method, path and access policy |
+| **Loose coupling** | UI, business logic and persistence are separate; clients depend only on the REST interface, not on internals |
+| **Service abstraction** | Clients call endpoints such as `POST /api/orders`; invoice numbering, validation and storage details are hidden behind them |
+| **Reusability** | The same Menu and Order operations serve both the Student and Staff clients |
+| **Autonomy / cohesion** | Each service owns one business area, with its own routes, controller and model |
+| **Statelessness** | Requests carry a JWT; the service layer holds no session state between calls |
+| **Discoverability** | The service catalog and API contracts are documented in this README |
+| **Composability** | Higher-level workflows (placing an order) are composed from Auth, Menu and Order services |
+
+---
+
+## 🛡️ Security & Cross-Cutting Concerns
+
+Concerns shared across services are handled once, in middleware and infrastructure, rather than repeated in each service.
+
+- **Authentication:** JWT verification middleware (`middleware/auth.js`)
+- **Authorization:** role-based guards — admin-only routes for menu changes, order management and analytics; student-only routes for placing and cancelling orders
+- **Password security:** bcrypt hashing with salt rounds
+- **Input validation:** server-side validation on all endpoints
+- **Error handling:** centralized error-handler middleware (`middleware/errorHandler.js`) for consistent error responses
+- **Traceability:** timestamped order `statusHistory`
+- **Performance:** MongoDB text index for search; aggregation pipelines for analytics
+
+---
+
+## 🖥️ Consumers (Client Layer)
+
+The React client is a consumer of the service layer and contains no business rules of its own.
+
+### 🎓 Student Interface
+- Browse menu with search, filter and sort
+- Shopping cart with add/remove and quantity adjustment (persisted in `localStorage`)
+- Place orders with phone number and optional notes
+- Order tracking with status updates, and order history with invoice numbers
+
+### 🏪 Canteen Staff (Admin) Interface
+- Incoming orders with customer name, email, phone and invoice number
+- Order management: Start Preparing → Ready for Pickup → Mark Picked Up
+- Orders page auto-refreshes every 15 seconds (polling)
+- Menu management (Create, Read, Update, Delete)
+- Analytics dashboard: bar chart of popular dishes, doughnut chart of order status, line chart of monthly revenue
+
+### 🔐 Role-Based Access
+- Separate Login/Register tabs for Student and Canteen Staff
+- Route protection: admins cannot access ordering pages, students cannot access admin pages
+- Role-based navigation (`Navbar.jsx`, `ProtectedRoute.jsx`)
+
+### 📱 Progressive Web App
+- Installable via "Add to Home Screen"
+- Offline-capable with Service Worker caching
+- App-like splash screen and native feel
+
+---
+
+## 🧰 Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend (consumers) | React.js 18 + Tailwind CSS + Chart.js |
+| Service layer | Node.js + Express.js (REST/JSON) |
+| Persistence | MongoDB + Mongoose ODM |
+| Authentication | JWT (JSON Web Tokens) + bcrypt |
+| Build tool | Vite |
+| PWA | Service Worker + Web App Manifest |
 
 ---
 
 ## 🚀 Setup Instructions
 
 ### Prerequisites
-- **Node.js** v16 or higher — [Download](https://nodejs.org/)
-- **MongoDB** — [Download Community Edition](https://www.mongodb.com/try/download/community)
+- Node.js v16 or higher
+- MongoDB Community Edition
 
-### Step 1: Clone the Repository
-
+### Step 1: Clone the repository
 ```bash
 git clone <repository-url>
 cd FSAD
 ```
 
-### Step 2: Install Backend Dependencies
-
+### Step 2: Install backend (service layer) dependencies
 ```bash
 cd backend
 npm install
 ```
 
-### Step 3: Configure Environment Variables
-
+### Step 3: Configure environment variables
 Edit `backend/.env`:
+
 ```env
 PORT=5000
 MONGODB_URI=mongodb://localhost:27017/foodie-express
@@ -88,35 +350,36 @@ JWT_SECRET=your_secret_key_here
 NODE_ENV=development
 ```
 
-### Step 4: Seed the Database
-
+### Step 4: Seed the database
 ```bash
 cd backend
 node seed/seedData.js
 ```
+
 This creates:
-- **3 users** (1 canteen admin + 2 students)
-- **25 menu items** across 6 categories
-- **3 sample orders** with different statuses
+- 3 users (1 canteen admin + 2 students)
+- 25 menu items across 6 categories
+- 3 sample orders with different statuses
 
-### Step 5: Install Frontend Dependencies
-
+### Step 5: Install frontend dependencies
 ```bash
 cd frontend
 npm install
 ```
 
-### Step 6: Start the Application
+### Step 6: Start the application
 
-**Terminal 1 — Backend:**
-```powershell
-cd backend; npm run dev
+**Terminal 1 — Service layer (backend):**
+```bash
+cd backend
+npm run dev
 ```
-Server starts at `http://localhost:5000`
+Services start at `http://localhost:5000`
 
-**Terminal 2 — Frontend:**
-```powershell
-cd frontend; npm run dev
+**Terminal 2 — Client (frontend):**
+```bash
+cd frontend
+npm run dev
 ```
 App opens at `http://localhost:3000`
 
@@ -124,191 +387,99 @@ App opens at `http://localhost:3000`
 
 ## 📋 Demo Login Credentials
 
-| Role               | Email              | Password  |
-| ------------------ | ------------------ | --------- |
-| 🏪 **Canteen Staff** | admin@canteen.com  | admin123  |
-| 🎓 Student 1        | john@example.com   | user123   |
-| 🎓 Student 2        | jane@example.com   | user123   |
+| Role | Email | Password |
+|---|---|---|
+| 🏪 Canteen Staff | `admin@canteen.com` | `admin123` |
+| 🎓 Student 1 | `john@example.com` | `user123` |
+| 🎓 Student 2 | `jane@example.com` | `user123` |
 
 ---
 
-## 🧾 Invoice System
-
-Every order generates a unique invoice number in the format:
-
-```
-INV-YYYYMMDD-NNNN
-```
-
-Example: `INV-20260328-0001`
-
-- **Students** can see their invoice number on the order tracking page
-- **Canteen Staff** sees the invoice number + student name/phone on the incoming orders page
-- Students show the invoice number to canteen staff for food pickup
-
----
-
-## 📡 REST API Documentation
-
-### Authentication
-
-| Method | Endpoint            | Description      | Auth     |
-| ------ | ------------------- | ---------------- | -------- |
-| POST   | `/api/auth/register`| Register new user| No       |
-| POST   | `/api/auth/login`   | Login            | No       |
-| GET    | `/api/auth/profile` | Get user profile | Required |
-
-### Menu Items
-
-| Method | Endpoint                    | Description              | Auth     |
-| ------ | --------------------------- | ------------------------ | -------- |
-| GET    | `/api/menu`                 | List items (paginated)   | No       |
-| GET    | `/api/menu/:id`             | Get single item          | No       |
-| GET    | `/api/menu/categories/list` | Get all categories       | No       |
-| POST   | `/api/menu`                 | Create item              | Admin    |
-| PUT    | `/api/menu/:id`             | Update item              | Admin    |
-| DELETE | `/api/menu/:id`             | Delete item              | Admin    |
-
-**Query Parameters for GET `/api/menu`:**
-| Param      | Description                          | Example              |
-| ---------- | ------------------------------------ | -------------------- |
-| `search`   | Search items by name                 | `?search=chicken`    |
-| `category` | Filter by category                   | `?category=veg`      |
-| `minPrice` | Minimum price filter                 | `?minPrice=100`      |
-| `maxPrice` | Maximum price filter                 | `?maxPrice=500`      |
-| `sort`     | Sort order (price_asc, price_desc, popular, rating, latest) | `?sort=popular` |
-| `page`     | Page number                          | `?page=2`            |
-| `limit`    | Items per page                       | `?limit=12`          |
-
-### Orders
-
-| Method | Endpoint                   | Description           | Auth          |
-| ------ | -------------------------- | --------------------- | ------------- |
-| POST   | `/api/orders`              | Create order          | Student       |
-| GET    | `/api/orders/my`           | Get my orders         | Student       |
-| GET    | `/api/orders/:id`          | Get order details     | Owner / Admin |
-| GET    | `/api/orders/:id/invoice`  | Get order invoice     | Owner / Admin |
-| GET    | `/api/orders`              | Get all orders        | Admin         |
-| PUT    | `/api/orders/:id/status`   | Update order status   | Admin         |
-| PUT    | `/api/orders/:id/cancel`   | Cancel order          | Student       |
-
-### Analytics
-
-| Method | Endpoint                   | Description           | Auth     |
-| ------ | -------------------------- | --------------------- | -------- |
-| GET    | `/api/analytics/popular`   | Popular dishes        | No       |
-| GET    | `/api/analytics/orders`    | Order statistics      | Admin    |
-| GET    | `/api/analytics/revenue`   | Revenue summary       | Admin    |
-
----
-
-## 📂 Project Structure
+## 📂 Project Structure (Mapped to Services)
 
 ```
 FSAD/
 ├── README.md
 │
-├── backend/                        # Node.js + Express API Server
+├── backend/                          # SOA service layer (Node.js + Express)
 │   ├── config/
-│   │   └── db.js                   # MongoDB connection
-│   ├── controllers/
-│   │   ├── authController.js       # Login, register, profile
-│   │   ├── menuController.js       # CRUD + search/filter/pagination
-│   │   ├── orderController.js      # Order creation, invoice, status tracking
-│   │   └── analyticsController.js  # Charts & statistics
-│   ├── middleware/
-│   │   ├── auth.js                 # JWT verification + admin check
-│   │   └── errorHandler.js         # Global error handler
-│   ├── models/
-│   │   ├── User.js                 # User schema (bcrypt + canteenName for admin)
-│   │   ├── MenuItem.js             # Menu item schema (text index)
-│   │   └── Order.js                # Order schema (invoice number + status history)
-│   ├── routes/
-│   │   ├── auth.js                 # /api/auth routes
-│   │   ├── menu.js                 # /api/menu routes
-│   │   ├── orders.js               # /api/orders routes (+ invoice)
-│   │   └── analytics.js            # /api/analytics routes
+│   │   └── db.js                     # MongoDB connection (shared infrastructure)
+│   ├── controllers/                  # Service business logic
+│   │   ├── authController.js         # ── Auth Service
+│   │   ├── menuController.js         # ── Menu Service
+│   │   ├── orderController.js        # ── Order & Invoice Service
+│   │   └── analyticsController.js    # ── Analytics Service
+│   ├── middleware/                   # Cross-cutting concerns
+│   │   ├── auth.js                   # JWT verification + admin check
+│   │   └── errorHandler.js           # Global error handler
+│   ├── models/                       # Persistence schemas
+│   │   ├── User.js                   # Auth Service (bcrypt + canteenName for admin)
+│   │   ├── MenuItem.js               # Menu Service (text index)
+│   │   └── Order.js                  # Order Service (invoice number + status history)
+│   ├── routes/                       # Service interfaces (REST endpoints)
+│   │   ├── auth.js                   # /api/auth
+│   │   ├── menu.js                   # /api/menu
+│   │   ├── orders.js                 # /api/orders (+ invoice)
+│   │   └── analytics.js              # /api/analytics
 │   ├── seed/
-│   │   └── seedData.js             # Database seeder (25 items + users)
-│   ├── .env                        # Environment variables
+│   │   └── seedData.js               # Database seeder (25 items + users)
+│   ├── .env                          # Environment variables
 │   ├── package.json
-│   └── server.js                   # Express entry point
+│   └── server.js                     # Express entry point (mounts all services)
 │
-├── frontend/                       # React + Vite SPA
-│   ├── public/
-│   │   ├── manifest.json           # PWA manifest
-│   │   ├── sw.js                   # Service worker
-│   │   └── icons/                  # App icons
-│   ├── src/
-│   │   ├── api/
-│   │   │   └── axios.js            # Axios instance with JWT interceptor
-│   │   ├── context/
-│   │   │   ├── AuthContext.jsx      # Auth state & JWT management
-│   │   │   └── CartContext.jsx      # Shopping cart state (localStorage)
-│   │   ├── components/
-│   │   │   ├── Navbar.jsx           # Role-based navigation (Student vs Staff)
-│   │   │   ├── Footer.jsx           # Footer with canteen info
-│   │   │   ├── FoodCard.jsx         # Menu item card component
-│   │   │   ├── Pagination.jsx       # Reusable pagination
-│   │   │   ├── SearchFilter.jsx     # Search, category, price filters
-│   │   │   └── ProtectedRoute.jsx   # Auth guard for routes
-│   │   ├── pages/
-│   │   │   ├── Home.jsx             # Student landing page
-│   │   │   ├── Menu.jsx             # Browse menu with filters
-│   │   │   ├── Cart.jsx             # Shopping cart
-│   │   │   ├── Checkout.jsx         # Place order form (canteen pickup)
-│   │   │   ├── Login.jsx            # Login with Student/Staff tabs
-│   │   │   ├── Register.jsx         # Register with Student/Staff tabs
-│   │   │   ├── MyOrders.jsx         # Order history with invoice numbers
-│   │   │   ├── OrderTracking.jsx    # Order tracking + invoice display
-│   │   │   └── admin/
-│   │   │       ├── Dashboard.jsx    # Analytics charts
-│   │   │       ├── ManageMenu.jsx   # CRUD menu items
-│   │   │       └── ManageOrders.jsx # Incoming orders with student details
-│   │   ├── App.jsx                  # Role-based routes configuration
-│   │   ├── main.jsx                 # React entry + context providers
-│   │   └── index.css                # Global styles + PWA optimizations
-│   ├── index.html                   # HTML + PWA meta tags
-│   ├── vite.config.js               # Vite + proxy configuration
-│   ├── tailwind.config.js           # Tailwind theme (orange palette)
-│   └── package.json
+└── frontend/                         # Consumer layer (React + Vite SPA)
+    ├── public/
+    │   ├── manifest.json             # PWA manifest
+    │   ├── sw.js                     # Service worker
+    │   └── icons/                    # App icons
+    ├── src/
+    │   ├── api/
+    │   │   └── axios.js              # Service client with JWT interceptor
+    │   ├── context/
+    │   │   ├── AuthContext.jsx       # Auth state & JWT management
+    │   │   └── CartContext.jsx       # Shopping cart state (localStorage)
+    │   ├── components/
+    │   │   ├── Navbar.jsx            # Role-based navigation (Student vs Staff)
+    │   │   ├── Footer.jsx            # Footer with canteen info
+    │   │   ├── FoodCard.jsx          # Menu item card component
+    │   │   ├── Pagination.jsx        # Reusable pagination
+    │   │   ├── SearchFilter.jsx      # Search, category, price filters
+    │   │   └── ProtectedRoute.jsx    # Auth guard for routes
+    │   ├── pages/
+    │   │   ├── Home.jsx              # Student landing page
+    │   │   ├── Menu.jsx              # Browse menu with filters
+    │   │   ├── Cart.jsx              # Shopping cart
+    │   │   ├── Checkout.jsx          # Place order form (canteen pickup)
+    │   │   ├── Login.jsx             # Login with Student/Staff tabs
+    │   │   ├── Register.jsx          # Register with Student/Staff tabs
+    │   │   ├── MyOrders.jsx          # Order history with invoice numbers
+    │   │   ├── OrderTracking.jsx     # Order tracking + invoice display
+    │   │   └── admin/
+    │   │       ├── Dashboard.jsx     # Analytics charts
+    │   │       ├── ManageMenu.jsx    # CRUD menu items
+    │   │       └── ManageOrders.jsx  # Incoming orders with student details
+    │   ├── App.jsx                   # Role-based routes configuration
+    │   ├── main.jsx                  # React entry + context providers
+    │   └── index.css                 # Global styles + PWA optimizations
+    ├── index.html                    # HTML + PWA meta tags
+    ├── vite.config.js                # Vite + proxy configuration
+    ├── tailwind.config.js            # Tailwind theme (orange palette)
+    └── package.json
 ```
 
 ---
 
-## 🎯 Order Status Flow
+## 🔭 Current Scope & Future Work
 
-```
-Pending → Preparing → Ready for Pickup → Picked Up (Delivered)
-    ↓
-  Cancelled
-```
+**Current scope:** the four services are separate service areas — each with its own routes, controller and model — exposed through REST/JSON. They are currently hosted by a single Express server and share one MongoDB database.
 
-Each status change is recorded with a timestamp in the order's `statusHistory` array.
+**Future work**
 
----
-
-## 🛠️ Technical Highlights
-
-### Backend
-- **Password Security** — bcrypt hashing with salt rounds
-- **JWT Authentication** — Token-based auth with middleware guards
-- **Invoice Generation** — Auto-incrementing unique invoice numbers using MongoDB counter
-- **MongoDB Aggregation** — Used for analytics (popular dishes, revenue)
-- **Text Indexing** — MongoDB text index on menu item names for fast search
-- **Input Validation** — Server-side validation on all endpoints
-- **Error Handling** — Centralized error handler middleware
-
-### Frontend
-- **Role-Based UI** — Completely separate interfaces for students and canteen staff
-- **React Context API** — For auth state and cart management
-- **Axios Interceptors** — Auto-attach JWT token to API requests
-- **Chart.js** — Interactive charts (Bar, Doughnut, Line) for analytics
-- **Tailwind CSS** — Utility-first CSS with custom orange theme
-- **Responsive Design** — Mobile-first, works on all screen sizes
-- **Toast Notifications** — User feedback via react-hot-toast
-- **PWA Support** — Installable with offline caching
-- **Auto-Refresh** — Admin orders page polls for new orders every 15 seconds
+- Add approved academic SOA literature and references
+- Expand automated testing (per-service unit and integration tests)
+- Add deployment and observability evidence (logging, monitoring)
+- Validate service interactions and integration end to end
+- Explore deploying services independently (e.g. an API gateway with separately deployed services)
 
 ---
 
